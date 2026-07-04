@@ -163,7 +163,7 @@ class StoreClient {
     }
 
     func authenticate(requestCode: Bool = false) -> Bool {
-        @ObservedObject var appData = AppData.shared
+        @ObservedObject var store = StoreData.shared
         
         if self.guid == nil {
             self.guid = generateGuid(appleId: appleId)
@@ -214,17 +214,17 @@ class StoreClient {
                                 print("pod gotten: \(pod)")
                                 self.pod = pod
                             } else {
-                                print("failed to get pod!! this breaks everything. try again or maybe use a different apple id?")
+                                print("failed to get pod!! this either means that you need to get a 2fa code or that you can't log in with this apple id.")
                             }
                         }
                     }
+                    
                     if let data = data {
                         do {
 //                            print("Data: \(String(data: data, encoding: .utf8))")
                             let resp = try PropertyListSerialization.propertyList(from: data, options: [], format: nil) as! [String: Any]
                             if let dsPersonId = resp["dsPersonId"] as? String, let passwordToken = resp["passwordToken"] as? String, !dsPersonId.isEmpty, !passwordToken.isEmpty {
                                 print("Authentication successful!")
-                                appData.hasSent2FACode = true
                                 let download_queue_info = resp["download-queue-info"] as! [String: Any]
                                 let dsid = download_queue_info["dsid"] as! Int
                                 let httpResp = response as! HTTPURLResponse
@@ -242,9 +242,11 @@ class StoreClient {
                                 self.accountName = address["firstName"]! + " " + address["lastName"]!
                                 self.saveAuthInfo()
                                 ret = true
+                                store.isLoggedIn = true
                             } else if (resp["customerMessage"] as! String).contains("Configurator_message") {
+                                store.sent2FA = true
                                 print("need 2fa...")
-                                appData.hasSent2FACode = true
+                                ret = false
                             } else {
                                 print("authentication failed: \(resp["customerMessage"] as! String)")
                                 DispatchQueue.main.async {
@@ -257,9 +259,6 @@ class StoreClient {
                     }
                 }
                 datatask.resume()
-//                while datatask.state != .completed {
-//                    sleep(1)
-//                }
                 if ret {
                     break
                 }
@@ -270,6 +269,7 @@ class StoreClient {
             }
             return ret
         }
+        
         return false
     }
 
@@ -536,7 +536,7 @@ class EncryptedKeychainWrapper {
     }
 
     static func loadAuthInfo() -> String? {
-        @ObservedObject var appData = AppData.shared
+        //@ObservedObject var store = StoreData.shared
         
         let fm = FileManager.default
         let path = fm.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("authinfo").path
@@ -553,12 +553,8 @@ class EncryptedKeychainWrapper {
         let status = SecItemCopyMatching(query as CFDictionary, &keyRef)
         if status != errSecSuccess {
             print("Failed to get key! Aborting login...")
-            DispatchQueue.main.async {
-                appData.appleId = ""
-                appData.password = ""
-                appData.hasSent2FACode = false
-                Alertinator.shared.alert(title: "Failed to login!", body: "Could not get the key. Please try again with a different Apple ID, preferrably one with 2FA enabled.")
-            }
+            //store.sent2FA = false
+            // this is where login can abort
             return nil
         }
         print("Got key!")

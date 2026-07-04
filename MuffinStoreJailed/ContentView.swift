@@ -8,236 +8,297 @@
 import SwiftUI
 import PartyUI
 
-struct ContentView: View {
-    @State private var hasShownWelcome: Bool = false
-    @State private var showLogs: Bool = true
-    @State private var showSettingsView: Bool = false
+final class StoreData: ObservableObject {
+    static let shared = StoreData()
     
-    @EnvironmentObject var appData: AppData
+    @Published var appBID = ""
+    @Published var appVersion = ""
+    @Published var hasServedApp = false
+    @Published var sent2FA = false
+    @Published var isLoggedIn = false
+}
+
+struct ContentView: View {
+    @StateObject private var store = StoreData.shared
+    @State private var ipaTool: IPATool?
+    
+    @State private var appleId = ""
+    @State private var password = ""
+    @State private var authCode = ""
+    
+    @State private var storeURL = ""
+    @State private var isDowngrading = false
+    
+    @State private var shownWelcome = false
+    @State private var showSettings = false
+    
+    let device = UIDevice.current
     
     var body: some View {
-        Group {
-            if UIDevice.current.userInterfaceIdiom == .pad {
-                NavigationSplitView(sidebar: {
-                    List {
-                        LogsSection
-                        NavigationButtons()
-                    }
-                    .navigationTitle("PancakeStore")
-                }) {
-                    List {
-                        if !appData.isAuthenticated {
-                            LoginSection
-                        } else {
-                            if appData.isDowngrading {
-                                AppInfoSection
-                            } else {
-                                InputAppSection
-                            }
-                        }
-                    }
+        NavigationStack {
+            List {
+                Section {
+                    LogView()
+                        .modifier(TerminalPlatter())
+                } header: {
+                    HeaderLabel(text: "Logs", icon: "terminal")
+                } footer: {
+                    Text("Made with love by the [jailbreak.party](https://jailbreak.party) team.\n[Join the jailbreak.party Discord!](https://jailbreak.party/discord)")
                 }
-            } else {
-                NavigationStack {
-                    List {
-                        LogsSection
-                        if !appData.isAuthenticated {
-                            LoginSection
-                        } else {
-                            if appData.isDowngrading {
-                                AppInfoSection
-                            } else {
-                                InputAppSection
-                            }
-                        }
+                
+                // login stuff
+                if !store.isLoggedIn {
+                    Section {
+                        TextField("Apple ID", text: $appleId)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                        SecureField("Password", text: $password)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                    } header: {
+                        HeaderLabel(text: "Log In", icon: "cloud")
                     }
-                    .navigationTitle("PancakeStore")
-                    .toolbar {
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Menu {
-                                Button(action: {
-                                    let tempDir = FileManager.default.temporaryDirectory
-                                    let tempIPAURL = tempDir.appendingPathComponent("app.ipa")
-                                    presentShareSheet(with: tempIPAURL)
-                                }) {
-                                    Label("Export IPA", systemImage: "arrow.up.doc")
-                                }
-                                .disabled(!appData.hasAppBeenServed)
-                                Button(action: {
-                                    Haptic.shared.play(.heavy)
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                                        EncryptedKeychainWrapper.nuke()
-                                        EncryptedKeychainWrapper.generateAndStoreKey()
-                                        sleep(1)
-                                        exitinator()
-                                    }
-                                }) {
-                                    ButtonLabel(text: "Log Out", icon: "arrow.right")
-                                }
-                                .disabled(!appData.isAuthenticated)
-                            } label : { Image(systemName: "line.horizontal.3") }
-                        }
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button(action: {
-                                showSettingsView.toggle()
-                            }) {
-                                Image(systemName: "gear")
-                            }
-                        }
-                    }
-                    .safeAreaInset(edge: .bottom) {
-                        NavigationButtons()
-                            .modifier(OverlayBackground())
-                    }
-                }
-            }
-        }
-        .sheet(isPresented: $showSettingsView) {
-            SettingsView()
-        }
-        .onAppear {
-            appData.isAuthenticated = EncryptedKeychainWrapper.hasAuthInfo()
-            print("Found \(appData.isAuthenticated ? "auth" : "no auth") info in keychain")
-            if appData.isAuthenticated {
-                appData.applicationStatus = "Ready to Downgrade!"
-                appData.applicationIcon = "checkmark.circle.fill"
-                appData.applicationIconColor = .primary
-                guard let authInfo = EncryptedKeychainWrapper.getAuthInfo() else {
-                    print("Failed to get auth info from keychain, logging out")
-                    appData.isAuthenticated = false
-                    EncryptedKeychainWrapper.nuke()
-                    EncryptedKeychainWrapper.generateAndStoreKey()
-                    return
-                }
-                appData.appleId = authInfo["appleId"]! as! String
-                appData.password = authInfo["password"]! as! String
-                appData.ipaTool = IPATool(appleId: appData.appleId, password: appData.password)
-                let ret = appData.ipaTool?.authenticate()
-                print("Re-authenticated \(ret! ? "successfully" : "unsuccessfully")")
-            } else {
-                print("No auth info found in keychain, setting up by generating a key in SEP")
-                EncryptedKeychainWrapper.generateAndStoreKey()
-            }
-        }
-    }
-    
-    private var LogsSection: some View {
-        Section(header: HeaderLabel(text: "Logs", icon: "terminal"), footer: Text("Originally created by [mineek](https://github.com/mineek) with QoL improvements and backend fixes made by [jailbreak.party](https://github.com/jailbreakdotparty).\nIf you are having issues logging in, please [see here](https://jailbreak.party/pancakestore/authentication).")) {
-            VStack {
-                TerminalHeader(text: appData.applicationStatus, icon: appData.applicationIcon, color: appData.applicationIconColor)
-                LogView()
-                    .modifier(TerminalPlatter())
-            }
-        }
-    }
-    
-    private var LoginSection: some View {
-        Group {
-            Section(header: HeaderLabel(text: "Login", icon: "icloud"), footer: Text("")) {
-                VStack {
-                    TextField("Apple ID", text: $appData.appleId)
-                        .modifier(TextFieldBackground())
-                        .disabled(appData.hasSent2FACode)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
                     
-                    HStack {
-                        if appData.showPassword {
-                            TextField("Password", text: $appData.password)
-                                .modifier(TextFieldBackground())
-                                .disabled(appData.hasSent2FACode)
+                    if store.sent2FA {
+                        Section {
+                            TextField("2FA Code", text: $authCode)
+                                .keyboardType(.numberPad)
                                 .autocorrectionDisabled()
                                 .textInputAutocapitalization(.never)
+                        } header: {
+                            HeaderLabel(text: "Authentication", icon: "faceid")
+                        }
+                    }
+                }
+                
+                // on login
+                if store.isLoggedIn && !isDowngrading {
+                    Section {
+                        TextField("App Store URL", text: $storeURL)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                    } header: {
+                        HeaderLabel(text: "Downgrade App", icon: "arrow.down.app")
+                    } footer: {
+                        Text("Not all apps are eligible for downgrading. Make sure that you've purchased the app in the App Store and that it is not currently installed before continuing.")
+                    }
+                }
+                
+                // while downgrading
+                if isDowngrading {
+                    Section {
+                        if store.hasServedApp {
+                            HStack(spacing: 12) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                                Text("Downgraded Application!")
+                            }
                         } else {
-                            SecureField("Password", text: $appData.password)
-                                .modifier(TextFieldBackground())
-                                .disabled(appData.hasSent2FACode)
-                                .autocorrectionDisabled()
-                                .textInputAutocapitalization(.never)
+                            HStack(spacing: 12) {
+                                ProgressView()
+                                Text("Downgrading Application...")
+                            }
+                        }
+                    }
+                    
+                    Section {
+                        LabeledContent("App Store URL") {
+                            if storeURL.isEmpty {
+                                ProgressView()
+                            } else {
+                                Text(storeURL)
+                                    .contextMenu {
+                                        Button {
+                                            UIPasteboard.general.string = storeURL
+                                        } label: {
+                                            Label("Copy", systemImage: "doc.on.doc")
+                                        }
+                                    }
+                            }
                         }
                         
-                        Button(action: {
-                            appData.showPassword.toggle()
-                        }) {
-                            Image(systemName: appData.showPassword ? "eye" : "eye.slash")
-                                .frame(width: 22, height: 22, alignment: .center)
+                        LabeledContent("Bundle ID") {
+                            if store.appBID.isEmpty {
+                                ProgressView()
+                            } else {
+                                Text(store.appBID)
+                                    .contextMenu {
+                                        Button {
+                                            UIPasteboard.general.string = store.appBID
+                                        } label: {
+                                            Label("Copy", systemImage: "doc.on.doc")
+                                        }
+                                    }
+                            }
                         }
-                        .buttonStyle(TranslucentButtonStyle(useFullWidth: false))
+                        
+                        LabeledContent("Version") {
+                            if store.appVersion.isEmpty {
+                                ProgressView()
+                            } else {
+                                Text(store.appVersion)
+                            }
+                        }
+                    } header: {
+                        HeaderLabel(text: "App Info", icon: "info.circle")
                     }
                 }
             }
-            
-            if appData.hasSent2FACode {
-                Section(header: HeaderLabel(text: "Verification Code", icon: "key")) {
-                    TextField("2FA Code", text: $appData.code)
-                        .modifier(TextFieldBackground())
-                        .keyboardType(.numberPad)
+            .navigationTitle("PancakeStore")
+            .scrollDismissesKeyboard(.interactively)
+            .safeAreaInset(edge: .bottom) {
+                Group {
+                    if !store.isLoggedIn && !store.sent2FA {
+                        Button {
+                            ipaTool = IPATool(appleId: appleId, password: password)
+                            let _ = ipaTool?.authenticate(requestCode: true)
+                        } label: {
+                            ButtonLabel(text: "Continue", icon: "arrow.right")
+                        }
+                        .buttonStyle(FancyButtonStyle())
+                        .disabled(appleId.isEmpty || password.isEmpty)
+                    }
+                    
+                    if !store.isLoggedIn && store.sent2FA {
+                        Button {
+                            let finalPassword = password + authCode
+                            ipaTool = IPATool(appleId: appleId, password: finalPassword)
+                            let _ = ipaTool?.authenticate()
+                        } label: {
+                            ButtonLabel(text: "Log In", icon: "arrow.right")
+                        }
+                        .buttonStyle(FancyButtonStyle())
+                        .disabled(authCode.isEmpty)
+                    }
+                    
+                    if store.isLoggedIn && !isDowngrading {
+                        Button {
+                            var appLinkParsed = storeURL
+                            appLinkParsed = appLinkParsed.components(separatedBy: "id").last ?? ""
+                            
+                            for char in appLinkParsed {
+                                if !char.isNumber {
+                                    appLinkParsed = String(appLinkParsed.prefix(upTo: appLinkParsed.firstIndex(of: char)!))
+                                    break
+                                }
+                            }
+                            
+                            print("App ID: \(appLinkParsed)")
+                            isDowngrading = true
+                            
+                            isDowngrading = downgradeApp(appId: appLinkParsed, ipaTool: ipaTool!)
+                        } label: {
+                            ButtonLabel(text: "Downgrade App", icon: "arrow.down")
+                        }
+                        .buttonStyle(FancyButtonStyle())
+                        .disabled(storeURL.isEmpty)
+                    }
+                    
+                    if isDowngrading {
+                        VStack {
+                            Button {
+                                LSApplicationWorkspace.default().openApplication(withBundleID: store.appBID)
+                            } label: {
+                                ButtonLabel(text: "Open App", icon: "arrow.up.right.square")
+                            }
+                            .buttonStyle(FancyButtonStyle())
+                            .disabled(!store.hasServedApp)
+                        }
+                    }
+                }
+                .modifier(OverlayBackground())
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Menu {
+                        Button {
+                            LSApplicationWorkspace().openApplication(withBundleID: "com.apple.AppStore")
+                        } label: {
+                            Label("Open App Store", systemImage: "bag")
+                        }
+                        
+                        Button(role: .destructive) {
+                            Alertinator.shared.alert(title: "Are you sure you'd like to do this?", body: "You'll have to sign back in again to use PancakeStore.", actionLabel: "Sign out", action: {
+                                EncryptedKeychainWrapper.nuke()
+                                EncryptedKeychainWrapper.generateAndStoreKey()
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                    exitinator()
+                                }
+                            })
+                        } label: {
+                            Label("Sign Out", systemImage: "person.fill.xmark")
+                        }
+                        .disabled(!store.isLoggedIn)
+                    } label: {
+                        Image(systemName: "ellipsis")
+                    }
+                }
+                
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showSettings.toggle()
+                    } label: {
+                        Image(systemName: "gear")
+                    }
+                }
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsView()
+            }
+            .onAppear {
+                print("\n=== PancakeStore v\(AppInfo.appVersion) (Release) ===")
+                store.isLoggedIn = EncryptedKeychainWrapper.hasAuthInfo()
+                print("Found \(store.isLoggedIn ? "auth" : "no auth") info in keychain")
+                
+                if store.isLoggedIn {
+                    guard let authInfo = EncryptedKeychainWrapper.getAuthInfo() else {
+                        print("Failed to get auth info from keychain, logging out")
+                        store.isLoggedIn = false
+                        EncryptedKeychainWrapper.nuke()
+                        EncryptedKeychainWrapper.generateAndStoreKey()
+                        return
+                    }
+                    
+                    appleId = authInfo["appleId"]! as! String
+                    password = authInfo["password"]! as! String
+                    
+                    ipaTool = IPATool(appleId: appleId, password: password)
+                    let result = ipaTool?.authenticate()
+                    print("Re-authenticated \(result ?? false ? "successfully" : "unsuccessfully")")
+                } else {
+                    print("No auth info found in keychain, setting up by generating a key in SEP")
+                    EncryptedKeychainWrapper.generateAndStoreKey()
+                }
+                
+                print("[*] Welcome to PancakeStore! Running on \(device.systemName) \(device.systemVersion), \(machineName()).")
+                
+                if !store.isLoggedIn {
+                    print("[!] Logging in may break at random due to Apple's constant server-side changes. If login fails, make sure that you're on the latest version of PancakeStore.")
+                } else {
+                    print("[*] Copy an app store link into the field below to downgrade. Do NOT ask for support if a specific app can't be downgraded or crashes on launch. There is nothing we can do about this.")
+                }
+            }
+            .onOpenURL { schemedURL in
+                let rawURL = schemedURL.absoluteString.replacingOccurrences(of: "pancakestore:", with: "")
+                if let appLink = rawURL.removingPercentEncoding {
+                    storeURL = appLink
+                    print("Successfully received app link! \(appLink)")
                 }
             }
         }
     }
-    
-    private var InputAppSection: some View {
-        Section(header: HeaderLabel(text: "Downgrade App", icon: "arrow.down.app"), footer: Text("To downgrade an app, it must have been purchased on your account at some point in the past (when the app has a cloud icon next to it). It must also not be installed on your device currently, but you can offload it.")) {
-            VStack {
-                TextField("Link to App Store App", text: $appData.appLink)
-                    .modifier(TextFieldBackground())
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
-            }
-        }
-    }
-    
-    private var AppInfoSection: some View {
-        Section(header: HeaderLabel(text: "App Info", icon: "info.circle")) {
-            ItemInfoCell(label: "App Link", icon: "link", text: appData.appLink)
-            ItemInfoCell(label: "App Bundle ID", icon: "shippingbox", text: appData.appBundleID)
-            ItemInfoCell(label: "Target App Version", icon: "arrow.down.app", text: appData.appVersion)
-        }
-    }
 }
 
-struct ItemInfoCell: View {
-    var label: String
-    var icon: String
-    var text: String
-    
-    var body: some View {
-        LabeledContent {
-            if text.isEmpty {
-                ProgressView()
-            } else {
-                Text(text)
-            }
-        } label: {
-            HStack {
-                Image(systemName: icon)
-                    .frame(width: 22, height: 22, alignment: .center)
-                Text(label)
-            }
-        }
-        .contextMenu {
-            Button(action: {
-                UIPasteboard.general.string = text
-            }) {
-                Label("Copy Value", systemImage: "character.cursor.ibeam")
-            }
-        }
-    }
-}
-
-struct SidebarToggleModifier: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(iOS 17.0, *) {
-            content
-                .toolbar(removing: .sidebarToggle)
-        } else {
-            content
-        }
+func machineName() -> String {
+    var systemInfo = utsname()
+    uname(&systemInfo)
+    let machineMirror = Mirror(reflecting: systemInfo.machine)
+    return machineMirror.children.reduce("") { identifier, element in
+        guard let value = element.value as? Int8, value != 0 else { return identifier }
+        return identifier + String(UnicodeScalar(UInt8(value)))
     }
 }
 
 #Preview {
     ContentView()
-        .environmentObject(AppData())
 }

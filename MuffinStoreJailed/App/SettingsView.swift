@@ -2,14 +2,13 @@
 //  SettingsView.swift
 //  PancakeStore
 //
-//  Created by Main on 1/11/26.
+//  Created by lunginspector on 1/11/26.
 //
 
 import SwiftUI
 import PartyUI
 
 struct SettingsView: View {
-    @EnvironmentObject var appData: AppData
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     
@@ -18,62 +17,55 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section(header: HeaderLabel(text: "About", icon: "info.circle")) {
+                Section {
                     VStack(alignment: .leading, spacing: 10) {
                         AppInfoCell(build: "Release")
                         HStack {
-                            Button(action: {
+                            Button {
                                 openURL(URL(string: "https://jailbreak.party/discord")!)
-                            }) {
+                            } label: {
                                 ButtonLabel(text: "Discord", icon: "discord", useImage: true)
                             }
                             .buttonStyle(TranslucentButtonStyle(color: .discord))
-                            Button(action: {
+                            
+                            Button {
                                 openURL(URL(string: "https://github.com/jailbreakdotparty/PancakeStore")!)
-                            }) {
+                            } label: {
                                 ButtonLabel(text: "GitHub", icon: "github", useImage: true)
                             }
                             .buttonStyle(TranslucentButtonStyle(color: .github))
                         }
-                        Button(action: {
+                        
+                        Button {
                             openURL(URL(string: "https://jailbreak.party/")!)
-                        }) {
+                        } label: {
                             ButtonLabel(text: "Website", icon: "globe")
                         }
                         .buttonStyle(TranslucentButtonStyle())
                     }
+                } header: {
+                    HeaderLabel(text: "About", icon: "info.circle")
                 }
                 
-                Section(header: HeaderLabel(text: "Settings", icon: "gearshape")) {
+                Section {
                     Toggle(isOn: $autoCleanApp) {
                         Text("Auto-Clean App")
                         Text("This is toggled on by default to make sure that PancakeStore doesn't keep any saved data from the app you had downgraded.")
                     }
+                    
+                    Button("Clean Documents") {
+                        cleanUp()
+                    }
+                } header: {
+                    HeaderLabel(text: "Data", icon: "loupe")
                 }
                 
-                Section(header: HeaderLabel(text: "Data", icon: "loupe"), footer: Text("If PancakeStore is taking up a lot of storage, click this button.")) {
-                    VStack {
-                        Button(action: {
-                            let tempDir = FileManager.default.temporaryDirectory
-                            let tempIPAURL = tempDir.appendingPathComponent("app.ipa")
-                            presentShareSheet(with: tempIPAURL)
-                        }) {
-                            ButtonLabel(text: "Export IPA", icon: "arrow.up.doc")
-                        }
-                        .buttonStyle(TranslucentButtonStyle())
-                        .disabled(!appData.hasAppBeenServed)
-                        Button(action: {
-                            cleanUp()
-                        }) {
-                            ButtonLabel(text: "Clean Documents", icon: "trash")
-                        }
-                        .buttonStyle(TranslucentButtonStyle())
-                    }
-                }
-                Section(header: HeaderLabel(text: "Credits", icon: "star")) {
+                Section {
                     LinkCreditCell(image: Image("mineek"), name: "mineek", description: "Original creator of MuffinStore Jailed.", url: "https://github.com/mineek")
-                    LinkCreditCell(image: Image("lunginspector"), name: "lunginspector", description: "UI changes and QoL improvements.", url: "https://github.com/lunginspector")
+                    LinkCreditCell(image: Image("lunginspector"), name: "lunginspector", description: "Obiliterated the frontend multiple times. Also did some backend fixes.", url: "https://github.com/lunginspector")
                     LinkCreditCell(image: Image("skadz"), name: "Skadz", description: "Fixed the entire authentication system thrice.", url: "https://github.com/skadz108")
+                } header: {
+                    HeaderLabel(text: "Credits", icon: "star")
                 }
             }
             .navigationTitle("Settings")

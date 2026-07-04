@@ -14,8 +14,6 @@ var weOnADebugBuild: Bool = false
 
 @main
 struct MuffinStoreJailedApp: App {
-    @StateObject private var appData = AppData.shared
-    
     @AppStorage("autoCleanApp") var autoCleanApp: Bool = true
     
     init() {
@@ -32,22 +30,14 @@ struct MuffinStoreJailedApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environmentObject(appData)
                 .onAppear {
                     if autoCleanApp {
                         cleanUp()
-                    }
-                }
-                // receive the incoming url
-                .onOpenURL { schemedURL in
-                    let rawURL = schemedURL.absoluteString.replacingOccurrences(of: "pancakestore:", with: "")
-                    if let appLink = rawURL.removingPercentEncoding {
-                        appData.appLink = appLink
-                        print("Successfully received app link! \(appLink)")
                     }
                 }
         }
     }
 }
 
+// make string compatiable with errors
 extension String: @retroactive Error {}
