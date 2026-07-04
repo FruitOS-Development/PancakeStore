@@ -1,35 +1,38 @@
-![Artboard](https://github.com/jailbreakdotparty/PancakeStore/blob/main/previewIcon.png)
-
-# PancakeStore
-A **jailed** app store app downgrader, based off of [MuffinStoreJailed](https://github.com/mineek/MuffinStoreJailed-Public). Supports iOS 16.4+ and does not use any exploits.
-
-[Latest Release](https://github.com/jailbreakdotparty/PancakeStore/releases/latest) • [Support Server](https://jailbreak.party/discord) • [Website](https://jailbreak.party) • [Original Project (by mineek)](https://github.com/mineek/MuffinStoreJailed-Public)
-
->[!NOTE]
->**Authentication is very unstable.** Due to frequent server changes by Apple, sign-in errors are very common, and these usually must be resolved by an app update.
->Please don't request support for these issues. It will be fixed eventually.
->For more information, read [here](https://jailbreak.party/pancakestore/authentication).
+<div align="center">
+  <br>
+  <a href="https://jailbreak.party/discord"><img src="https://github.com/jailbreakdotparty/PancakeStore/blob/main/PreviewIcon.png?raw=true" alt="App Icon" width="175"></a>
+  <br>
+  <h1>PancakeStore</h1>
+  <p>Exploit-less app store downgrader based off of <a href="https://github.com/mineek/MuffinStoreJailed-Public">MuffinStore Jailed</a>.</p>
+  <p>Supports iOS 16.4 and later.</p>
+  <p><a href="https://github.com/jailbreakdotparty/PancakeStore/releases/latest">Latest Release</a> • <a href="https://jailbreak.party/discord">Discord Server</a> • <a href="https://jailbreak.party">Our Website</a></p>
+</div>
 
 >[!WARNING]
->Use this tool at your own risk! You may lose app data, and other damage could occur.
+> **Logging in may break at random due to Apple's constant server-side changes.** If login fails, make sure that you're on the latest version of PancakeStore. Do NOT open any issues or ask for support regading logins. It will not speed up the process of fixing [authentication](https://jailbreak.party/pancakestore/authentication).
 
-## Prerequisites
-- An iPhone or iPad running iOS 16.4 or later.
-- An Apple ID that has 2FA **enabled.**
-- Some method of sideloading.
+## Before you continue...
+- Not only is authentication unstable, but there is no guarantee that user data will be retained when downgrading! Use this tool at your own risk.
 
-## How do I downgrade an application?
-1. Make sure that you have uninstalled the app you want to downgrade beforehand. To keep your app data, offload the app instead of uninstalling it.
-2. Install PancakeStore using your preferred sideloading method.
-3. Log in your Apple ID, and click "Send 2FA Code."
-4. You will likely receive a 2FA popup. Click "Allow" and write down the code somewhere. Then, type the code into the text field. If you do not get this pop up, just type six random numbers instead. Finally, click "Log In."
-5. Get the app store link of the application you want to downgrade.
-6. Type or paste the link to the app into the field.
-7. Click "Downgrade App," select the version you'd like to downgrade to, and wait patiently!
+## Installation
+Please make sure that the following requirements are met:
+- Your device is running iOS 16.4 or later.
+- You have an Apple ID with 2FA enabled (highly recommended to be the one your iDevice is signed in with).
+- You have a sideloading method of your choice to install this tool. Almost all methods of sideloading, including TrollStore and LiveContainer, are supported.
+
+## Usage
+The target app must meet the following requirements:
+- This app has been purchased from the App Store with the same Apple ID you're using to log in.
+- The app isn't installed on your device (offloading works).
+- The app actually has vaild versions to downgrade to (some don't, so keep this in mind).
+
+> Do NOT ask for support if a specific app can't be downgraded or crashes on launch. There is nothing we can do about this.
 
 ## Troubleshooting
-- **App crashes when trying to log in:** You likely input the wrong 2FA code. Kill the app from the app switcher and try again.
-- **App doesn't progress when clicking "log in":** You likely input the wrong Apple ID and/or Password. Kill the app from the app switcher and try again.
-- **I don't receive a 2FA code when clicking "Authenticate":** Type six random numbers into the field and log in. This likely works because you had logged into MuffinStoreJailed or PancakeStore in the past, even on a different device.
-- **The app crashes when I try to downgrade:** You likely did not purchase (download) the app in the past. Download the app beforehand and remove it, or purchase it from another device.
+- **"Failed to get pod" error:** This usually means that logging in will be impossible on this Apple ID, or that a server-side change has broke authentication. Please don't open any issues or ask for support if you get this error.
 - **"Safari can't open the page" error:** Go to Settings > Apps > Safari, and under "Privacy & Security," disable "Not Secure Connection Warning." Also ensure that you don't have any VPN or DNS settings that might be affecting this.
+
+## Credits
+- [Mineek](https://github.com/mineek): Created the original project.
+- [skadz108](https://github.com/skadz108): Multiple fixes to authentication throughout apple's server-side changes.
+- [lunginspector](https://github.com/lunginspector): Frontend manager and QoL improvements.
