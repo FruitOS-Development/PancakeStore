@@ -51,23 +51,3 @@ struct MainContainerView: View {
         }
     }
 }
-struct TabBarButton: View {
-    let icon: String
-    let text: String
-    let isActive: Bool
-    let action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.system(size: 20))
-                Text(text)
-                    .font(.caption)
-            }
-            .foregroundColor(isActive ? .blue : .gray)
-            .frame(maxWidth: .infinity)
-        }
-    }
-}
-
