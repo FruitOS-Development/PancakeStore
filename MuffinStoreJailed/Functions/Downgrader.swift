@@ -19,6 +19,7 @@ struct SafariWebView: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
 }
 
+@MainActor
 func downgradeAppToVersion(appId: String, versionId: String, ipaTool: IPATool) {
     @ObservedObject var data = StoreData.shared
     
