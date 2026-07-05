@@ -39,7 +39,7 @@ struct MainContainerView: View {
                 .cornerRadius(30)
                 .overlay(
                     RoundedRectangle(cornerRadius: 30)
-                        .stroke(Color.white.opacity(0.1), width: 1)
+                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
                 )
                 .shadow(color: .black.opacity(0.5), radius: 10, x: 0, y: 5)
                 .padding(.bottom, 15)
@@ -51,3 +51,23 @@ struct MainContainerView: View {
         }
     }
 }
+struct TabBarButton: View {
+    let icon: String
+    let text: String
+    let isActive: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 20))
+                Text(text)
+                    .font(.caption)
+            }
+            .foregroundColor(isActive ? .blue : .gray)
+            .frame(maxWidth: .infinity)
+        }
+    }
+}
+
