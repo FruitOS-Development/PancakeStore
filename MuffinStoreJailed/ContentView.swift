@@ -23,32 +23,78 @@ struct ContentView: View {
     @State private var selectedTab = 0
     
     var body: some View {
-        TabView(selection: $selectedTab) {
-            DowngradeTabView()
-                .tabItem {
-                    Label("Downgrade", systemImage: "arrow.down.app.fill")
+        ZStack(alignment: .bottom) {
+            // Content Switcher basierend auf dem ausgewählten Tab
+            Group {
+                if selectedTab == 0 {
+                    DowngradeTabView()
+                } else if selectedTab == 1 {
+                    // Placeholder für Spiele
+                    NavigationStack {
+                        VStack {
+                            Image(systemName: "bolt.rocket")
+                                .font(.system(size: 70))
+                                .foregroundColor(.orange)
+                                .padding(.bottom, 10)
+                            Text("Spiele kommen bald")
+                                .font(.title2)
+                                .bold()
+                        }
+                        .navigationTitle("Spiele")
+                    }
+                } else if selectedTab == 2 {
+                    CustomIPATabView()
+                } else if selectedTab == 3 {
+                    ConsoleTabView()
+                } else if selectedTab == 4 {
+                    SettingsGridTabView()
                 }
-                .tag(0)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.bottom, 65) // Platzhalter für die Custom Tab Bar unten
             
-            CustomIPATabView()
-                .tabItem {
-                    Label("Eigene IPAs", systemImage: "doc.badge.plus")
+            // MARK: Custom App Store Tab Bar
+            VStack(spacing: 0) {
+                // Trennlinie mit dem korrekten lineWidth Parameter
+                Rectangle()
+                    .fill(Color.white.opacity(0.1))
+                    .frame(height: 1)
+                
+                HStack(spacing: 0) {
+                    TabBarButton(icon: "doc.text.image", text: "Heute", isActive: selectedTab == 0) { selectedTab = 0 }
+                    TabBarButton(icon: "bolt.rocket", text: "Spiele", isActive: selectedTab == 1) { selectedTab = 1 }
+                    TabBarButton(icon: "layers", text: "Apps", isActive: selectedTab == 2) { selectedTab = 2 }
+                    TabBarButton(icon: "gamecontroller", text: "Arcade", isActive: selectedTab == 3) { selectedTab = 3 }
+                    TabBarButton(icon: "magnifyingglass", text: "Suche", isActive: selectedTab == 4) { selectedTab = 4 }
                 }
-                .tag(1)
-            
-            ConsoleTabView()
-                .tabItem {
-                    Label("Logs", systemImage: "terminal.fill")
-                }
-                .tag(2)
-            
-            SettingsGridTabView()
-                .tabItem {
-                    Label("Einstellungen", systemImage: "gearshape.fill")
-                }
-                .tag(3)
+                .padding(.top, 10)
+                .padding(.bottom, 25) // SafeArea Padding für moderne iPhones
+                .background(Color(.systemBackground).edgesIgnoringSafeArea(.bottom))
+            }
         }
-        .tint(.orange) // PancakeStore Branding-Farbe
+        .edgesIgnoringSafeArea(.bottom)
+    }
+}
+
+// MARK: - CUSTOM TAB BAR BUTTON
+struct TabBarButton: View {
+    let icon: String
+    let text: String
+    let isActive: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 22))
+                Text(text)
+                    .font(.system(size: 10, weight: .medium))
+            }
+            // Nutzt deine PancakeStore Branding-Farbe (.orange) wenn aktiv
+            .foregroundColor(isActive ? .orange : .gray)
+            .frame(maxWidth: .infinity)
+        }
     }
 }
 
@@ -141,19 +187,16 @@ struct DowngradeTabView: View {
                             
                             if !isDowngrading {
                                 Button {
-                                    // CRASH FIX 1: Sicherer RegEx-Parser für die ID
                                     guard let idRange = storeURL.range(of: "(?<=id)[0-9]+", options: .regularExpression) else {
                                         print("[!] URL ungültig.")
                                         return
                                     }
                                     let parsedID = String(storeURL[idRange])
                                     
-                                    // CRASH FIX 2: Absicherung gegen Nil-Instanzen
                                     guard let validTool = ipaTool else { return }
                                     
                                     isDowngrading = true
                                     
-                                    // CRASH FIX 3: Komplett asynchroner Thread (Verhindert iOS-Watchdog-Kill!)
                                     DispatchQueue.global(qos: .userInitiated).async {
                                         let success = downgradeApp(appId: parsedID, ipaTool: validTool)
                                         
@@ -212,7 +255,6 @@ struct DowngradeTabView: View {
                             
                             Divider()
                             
-                            // App Info Grid
                             VStack(spacing: 12) {
                                 KeyValueRow(key: "Bundle ID", value: store.appBID.isEmpty ? "Wird geladen..." : store.appBID)
                                 KeyValueRow(key: "Ziel-Version", value: store.appVersion.isEmpty ? "Wird ermittelt..." : store.appVersion)
@@ -249,7 +291,7 @@ struct DowngradeTabView: View {
     }
 }
 
-// MARK: - TAB 2: EIGENE IPAS (FUTURE FEATURE WORK)
+// MARK: - TAB 2: EIGENE IPAS
 struct CustomIPATabView: View {
     var body: some View {
         NavigationStack {
@@ -281,7 +323,7 @@ struct CustomIPATabView: View {
     }
 }
 
-// MARK: - TAB 3: CONSOLE VIEW (AUSGELAGERT)
+// MARK: - TAB 3: CONSOLE VIEW (System Logs)
 struct ConsoleTabView: View {
     var body: some View {
         NavigationStack {
@@ -296,7 +338,7 @@ struct ConsoleTabView: View {
     }
 }
 
-// MARK: - TAB 4: SETTINGS
+// MARK: - TAB 4: SETTINGS (Suche / Einstellungen)
 struct SettingsGridTabView: View {
     @StateObject private var store = StoreData.shared
     
