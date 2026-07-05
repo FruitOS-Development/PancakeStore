@@ -51,3 +51,22 @@ struct MainContainerView: View {
         }
     }
 }
+// Ganz unten am Ende von MainContainerView.swift einfügen:
+
+struct TabBarButton: View {
+    let icon: String
+    let text: String
+    let isActive: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Image(systemName: icon).font(.system(size: 22))
+                Text(text).font(.system(size: 10, weight: .medium))
+            }
+            .foregroundColor(isActive ? .orange : .gray)
+            .frame(maxWidth: .infinity)
+        }
+    }
+}
