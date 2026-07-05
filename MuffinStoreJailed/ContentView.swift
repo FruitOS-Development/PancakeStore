@@ -107,7 +107,7 @@ struct DowngradeTabView: View {
                                 }
                             } label: {
                                 Text(store.sent2FA ? "Einloggen" : "Code anfordern")
-                                    .font(.semibold)
+                                    .fontWeight(.semibold)
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 10)
                             }
