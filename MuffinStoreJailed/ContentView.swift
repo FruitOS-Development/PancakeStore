@@ -173,20 +173,31 @@ struct ContentView: View {
                     
                     if store.isLoggedIn && !isDowngrading {
                         Button {
-                            var appLinkParsed = storeURL
-                            appLinkParsed = appLinkParsed.components(separatedBy: "id").last ?? ""
+                            // Safe RegEx pattern searching for numeric sequence directly following "id"
+                            guard let idRange = storeURL.range(of: "(?<=id)[0-9]+", options: .regularExpression) else {
+                                print("[!] Error parsing URL: Could not extract numeric App ID.")
+                                return
+                            }
+                            let appLinkParsed = String(storeURL[idRange])
+                            print("App ID: \(appLinkParsed)")
                             
-                            for char in appLinkParsed {
-                                if !char.isNumber {
-                                    appLinkParsed = String(appLinkParsed.prefix(upTo: appLinkParsed.firstIndex(of: char)!))
-                                    break
-                                }
+                            // Prevent explicit unwrapping runtime crashes
+                            guard let validTool = ipaTool else {
+                                print("[!] Critical Error: Active IPATool session instance is missing.")
+                                return
                             }
                             
-                            print("App ID: \(appLinkParsed)")
                             isDowngrading = true
                             
-                            isDowngrading = downgradeApp(appId: appLinkParsed, ipaTool: ipaTool!)
+                            // Run the operation asynchronously on a background queue to preserve UI responsiveness
+                            DispatchQueue.global(qos: .userInitiated).async {
+                                let success = downgradeApp(appId: appLinkParsed, ipaTool: validTool)
+                                
+                                // Safely return to the UI main thread to reflect final progress
+                                DispatchQueue.main.async {
+                                    self.isDowngrading = success
+                                }
+                            }
                         } label: {
                             ButtonLabel(text: "Downgrade App", icon: "arrow.down")
                         }
@@ -263,8 +274,11 @@ struct ContentView: View {
                     password = authInfo["password"]! as! String
                     
                     ipaTool = IPATool(appleId: appleId, password: password)
-                    let result = ipaTool?.authenticate()
-                    print("Re-authenticated \(result ?? false ? "successfully" : "unsuccessfully")")
+                    let result = ipaTool?.authenticate() ?? false
+                    
+                    // Fixed: Bind login UI structure directly to the remote confirmation value
+                    store.isLoggedIn = result
+                    print("Re-authenticated \(result ? "successfully" : "unsuccessfully")")
                 } else {
                     print("No auth info found in keychain, setting up by generating a key in SEP")
                     EncryptedKeychainWrapper.generateAndStoreKey()
