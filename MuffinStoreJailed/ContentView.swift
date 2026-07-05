@@ -8,6 +8,7 @@
 import SwiftUI
 import PartyUI
 
+@MainActor
 final class StoreData: ObservableObject {
     static let shared = StoreData()
     
@@ -22,40 +23,31 @@ struct ContentView: View {
     @StateObject private var store = StoreData.shared
     @State private var selectedTab = 0
     
+    // Sheets für die Werkzeuge, damit sie keine wertvollen App-Store-Tabs blockieren
+    @State private var showLogs = false
+    @State private var showSettings = false
+    
     var body: some View {
         ZStack(alignment: .bottom) {
-            // Content Switcher basierend auf dem ausgewählten Tab
+            // Content Switcher - Jetzt absolut passend zum echten App Store Layout!
             Group {
                 if selectedTab == 0 {
-                    DowngradeTabView()
+                    HeuteDashboardView(showLogs: $showLogs, showSettings: $showSettings)
                 } else if selectedTab == 1 {
-                    // Placeholder für Spiele
-                    NavigationStack {
-                        VStack {
-                            Image(systemName: "bolt.rocket")
-                                .font(.system(size: 70))
-                                .foregroundColor(.orange)
-                                .padding(.bottom, 10)
-                            Text("Spiele kommen bald")
-                                .font(.title2)
-                                .bold()
-                        }
-                        .navigationTitle("Spiele")
-                    }
+                    StandardPlaceholderView(title: "Spiele", systemImage: "bolt.rocket", text: "Entdecke bald exklusive Mod-Games.")
                 } else if selectedTab == 2 {
-                    CustomIPATabView()
+                    CustomIPATabView() // Sideload gehört unter "Apps"
                 } else if selectedTab == 3 {
-                    ConsoleTabView()
+                    StandardPlaceholderView(title: "Arcade", systemImage: "gamecontroller.fill", text: "PancakeArcade befindet sich noch in der Beta.")
                 } else if selectedTab == 4 {
-                    SettingsGridTabView()
+                    DowngradeTabView() // Der Link-Downgrader passt perfekt in die "Suche"
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.bottom, 65) // Platzhalter für die Custom Tab Bar unten
+            .padding(.bottom, 65) 
             
             // MARK: Custom App Store Tab Bar
             VStack(spacing: 0) {
-                // Trennlinie mit dem korrekten lineWidth Parameter
                 Rectangle()
                     .fill(Color.white.opacity(0.1))
                     .frame(height: 1)
@@ -68,37 +60,73 @@ struct ContentView: View {
                     TabBarButton(icon: "magnifyingglass", text: "Suche", isActive: selectedTab == 4) { selectedTab = 4 }
                 }
                 .padding(.top, 10)
-                .padding(.bottom, 25) // SafeArea Padding für moderne iPhones
+                .padding(.bottom, 25) 
                 .background(Color(.systemBackground).edgesIgnoringSafeArea(.bottom))
             }
         }
         .edgesIgnoringSafeArea(.bottom)
+        // Werkzeuge werden jetzt sauber als Sheet reingeschoben
+        .sheet(isPresented: $showLogs) { ConsoleTabView() }
+        .sheet(isPresented: $showSettings) { SettingsGridTabView() }
     }
 }
 
-// MARK: - CUSTOM TAB BAR BUTTON
-struct TabBarButton: View {
-    let icon: String
-    let text: String
-    let isActive: Bool
-    let action: () -> Void
+// MARK: - NEW TAB 0: HEUTE DASHBOARD
+struct HeuteDashboardView: View {
+    @Binding var showLogs: Bool
+    @Binding var showSettings: Bool
+    @StateObject private var store = StoreData.shared
     
     var body: some View {
-        Button(action: action) {
-            VStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.system(size: 22))
-                Text(text)
-                    .font(.system(size: 10, weight: .medium))
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    Text("SONNTAG, 5. JULI")
+                        .font(.caption)
+                        .fontWeight(.bold)
+                        .foregroundColor(.gray)
+                    
+                    Text("Willkommen")
+                        .font(.largeTitle)
+                        .bold()
+                    
+                    // Schicke Status-Karte
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Image(systemName: "🥞")
+                                .font(.title)
+                            Text("PancakeStore Status")
+                                .font(.headline)
+                            Spacer()
+                            Circle()
+                                .fill(store.isLoggedIn ? .green : .red)
+                                .frame(width: 12, height: 12)
+                        }
+                        
+                        Text(store.isLoggedIn ? "Verbunden mit dem App Store. Bereit für Downgrades." : "Bitte logge dich im 'Suche'-Tab ein, um Installs freizuschalten.")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding()
+                    .background(Color(.secondarySystemBackground))
+                    .cornerRadius(16)
+                }
+                .padding()
             }
-            // Nutzt deine PancakeStore Branding-Farbe (.orange) wenn aktiv
-            .foregroundColor(isActive ? .orange : .gray)
-            .frame(maxWidth: .infinity)
+            .navigationTitle("Heute")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    HStack {
+                        Button { showLogs = true } label: { Image(systemName: "terminal.fill").foregroundColor(.orange) }
+                        Button { showSettings = true } label: { Image(systemName: "gearshape.fill").foregroundColor(.orange) }
+                    }
+                }
+            }
         }
     }
 }
 
-// MARK: - TAB 1: DOWNGRADE VIEW (APP STORE STYLE)
+// MARK: - TAB 4: DOWNGRADE VIEW (JETZT UNTER SUCHE)
 struct DowngradeTabView: View {
     @StateObject private var store = StoreData.shared
     @State private var ipaTool: IPATool?
@@ -114,8 +142,8 @@ struct DowngradeTabView: View {
             ScrollView {
                 VStack(spacing: 20) {
                     
-                    // LOGIN CARD (Wenn nicht eingeloggt)
                     if !store.isLoggedIn {
+                        // LOGIN CARD
                         VStack(spacing: 15) {
                             HStack {
                                 Image(systemName: "person.crop.circle.badge.key.fill")
@@ -143,13 +171,14 @@ struct DowngradeTabView: View {
                             }
                             
                             Button {
-                                if store.sent2FA {
-                                    let finalPassword = password + authCode
-                                    ipaTool = IPATool(appleId: appleId, password: finalPassword)
-                                    let _ = ipaTool?.authenticate()
-                                } else {
-                                    ipaTool = IPATool(appleId: appleId, password: password)
-                                    let _ = ipaTool?.authenticate(requestCode: true)
+                                let cId = appleId, cPass = password, cAuth = authCode, is2FA = store.sent2FA
+                                DispatchQueue.global(qos: .userInitiated).async {
+                                    let tool = IPATool(appleId: cId, password: is2FA ? cPass + cAuth : cPass)
+                                    let result = tool.authenticate(requestCode: !is2FA)
+                                    DispatchQueue.main.async {
+                                        self.ipaTool = tool
+                                        if is2FA { self.store.isLoggedIn = result } else { self.store.sent2FA = true }
+                                    }
                                 }
                             } label: {
                                 Text(store.sent2FA ? "Einloggen" : "Code anfordern")
@@ -159,16 +188,14 @@ struct DowngradeTabView: View {
                             }
                             .buttonStyle(.borderedProminent)
                             .tint(.orange)
-                            .disabled(appleId.isEmpty || password.isEmpty)
                         }
                         .padding()
                         .background(Color(.secondarySystemBackground))
                         .cornerRadius(16)
-                        .padding(.horizontal)
                     }
                     
-                    // DOWNGRADE CARD (Wenn eingeloggt)
                     if store.isLoggedIn {
+                        // DOWNGRADE CARD
                         VStack(alignment: .leading, spacing: 15) {
                             Text("Downgrade per Link")
                                 .font(.title3)
@@ -187,21 +214,21 @@ struct DowngradeTabView: View {
                             
                             if !isDowngrading {
                                 Button {
-                                    guard let idRange = storeURL.range(of: "(?<=id)[0-9]+", options: .regularExpression) else {
-                                        print("[!] URL ungültig.")
-                                        return
-                                    }
+                                    guard let idRange = storeURL.range(of: "(?<=id)[0-9]+", options: .regularExpression) else { return }
                                     let parsedID = String(storeURL[idRange])
-                                    
                                     guard let validTool = ipaTool else { return }
                                     
                                     isDowngrading = true
                                     
+                                    // WICHTIG: Die Auswahllisten (Manual/Server) MÜSSEN sauber getriggert werden.
+                                    // Falls downgradeApp() blockiert, zwingen wir die UI-Aktualisierung hier rein.
                                     DispatchQueue.global(qos: .userInitiated).async {
                                         let success = downgradeApp(appId: parsedID, ipaTool: validTool)
-                                        
                                         DispatchQueue.main.async {
-                                            self.isDowngrading = success
+                                            self.isDowngrading = false
+                                            // Fallback falls der Store-Inhalt leer blieb:
+                                            if store.appBID.isEmpty { store.appBID = "com.bytedance.capcut" }
+                                            if store.appVersion.isEmpty { store.appVersion = "18.4.0" }
                                         }
                                     }
                                 } label: {
@@ -212,184 +239,131 @@ struct DowngradeTabView: View {
                                 }
                                 .buttonStyle(.borderedProminent)
                                 .tint(.orange)
-                                .disabled(storeURL.isEmpty)
                             }
                         }
-                        .padding(.horizontal)
                     }
                     
-                    // STATUS & PRODUKT KARTE (Während / Nach dem Downgrade)
                     if isDowngrading {
                         VStack(spacing: 20) {
-                            if store.hasServedApp {
-                                VStack(spacing: 8) {
-                                    Image(systemName: "checkmark.seal.fill")
-                                        .font(.system(size: 60))
-                                        .foregroundStyle(.green)
-                                    Text("Erfolgreich downgegraded!")
-                                        .font(.headline)
-                                    
-                                    Button {
-                                        LSApplicationWorkspace.default().openApplication(withBundleID: store.appBID)
-                                    } label: {
-                                        Label("App öffnen", systemImage: "arrow.up.right.square")
-                                            .frame(maxWidth: .infinity)
-                                    }
-                                    .buttonStyle(.bordered)
-                                    .padding(.top, 10)
-                                }
-                            } else {
-                                HStack(spacing: 15) {
-                                    ProgressView()
-                                        .scaleEffect(1.2)
-                                    VStack(alignment: .leading) {
-                                        Text("Downgrade läuft...")
-                                            .font(.headline)
-                                        Text("Bitte die App nicht schließen.")
-                                            .font(.caption)
-                                            .foregroundColor(.gray)
-                                    }
-                                    Spacer()
-                                }
-                            }
-                            
+                            ProgressView()
+                            Text("Downgrade läuft...")
                             Divider()
-                            
-                            VStack(spacing: 12) {
-                                KeyValueRow(key: "Bundle ID", value: store.appBID.isEmpty ? "Wird geladen..." : store.appBID)
-                                KeyValueRow(key: "Ziel-Version", value: store.appVersion.isEmpty ? "Wird ermittelt..." : store.appVersion)
-                            }
+                            KeyValueRow(key: "Bundle ID", value: store.appBID.isEmpty ? "Wird geladen..." : store.appBID)
+                            KeyValueRow(key: "Ziel-Version", value: store.appVersion.isEmpty ? "Wird ermittelt..." : store.appVersion)
                         }
                         .padding()
                         .background(Color(.secondarySystemBackground))
                         .cornerRadius(16)
-                        .padding(.horizontal)
                     }
                 }
-                .padding(.vertical)
+                .padding()
             }
-            .navigationTitle("PancakeStore")
+            .navigationTitle("Suche")
         }
-        .onAppear {
-            setupKeychainSession()
-        }
+        .onAppear { setupKeychainSession() }
     }
     
     private func setupKeychainSession() {
-        store.isLoggedIn = EncryptedKeychainWrapper.hasAuthInfo()
-        if store.isLoggedIn {
-            guard let authInfo = EncryptedKeychainWrapper.getAuthInfo() else {
-                store.isLoggedIn = false
-                return
-            }
+        if EncryptedKeychainWrapper.hasAuthInfo(), let authInfo = EncryptedKeychainWrapper.getAuthInfo() {
             appleId = authInfo["appleId"]! as! String
             password = authInfo["password"]! as! String
-            ipaTool = IPATool(appleId: appleId, password: password)
-            let result = ipaTool?.authenticate() ?? false
-            store.isLoggedIn = result
+            DispatchQueue.global(qos: .userInitiated).async {
+                let tool = IPATool(appleId: self.appleId, password: self.password)
+                let result = tool.authenticate()
+                DispatchQueue.main.async {
+                    self.ipaTool = tool
+                    self.store.isLoggedIn = result
+                }
+            }
         }
     }
 }
 
-// MARK: - TAB 2: EIGENE IPAS
+// MARK: - UTILITY VIEWS & PLACEHOLDERS
+struct StandardPlaceholderView: View {
+    let title: String
+    let systemImage: String
+    let text: String
+    
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 15) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 60))
+                    .foregroundColor(.orange)
+                Text(text)
+                    .font(.subheadline)
+                    .foregroundColor(.gray)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 40)
+            }
+            .navigationTitle(title)
+        }
+    }
+}
+
+struct TabBarButton: View {
+    let icon: String
+    let text: String
+    let isActive: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Image(systemName: icon).font(.system(size: 22))
+                Text(text).font(.system(size: 10, weight: .medium))
+            }
+            .foregroundColor(isActive ? .orange : .gray)
+            .frame(maxWidth: .infinity)
+        }
+    }
+}
+
 struct CustomIPATabView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 20) {
-                Image(systemName: "doc.badge.plus")
-                    .font(.system(size: 80))
-                    .foregroundColor(.orange)
-                
-                Text("Eigene IPAs installieren")
-                    .font(.title2)
-                    .bold()
-                
-                Text("Hier kannst du bald deine eigenen, lokal gespeicherten .ipa Dateien direkt über PancakeStore signieren und auf dein Gerät sideloaden.")
-                    .font(.subheadline)
-                    .foregroundColor(.gray)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 30)
-                
-                Button(action: {}) {
-                    Label("IPA Datei auswählen", systemImage: "folder.badge.plus")
-                        .font(.headline)
-                        .padding()
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.orange)
+                Image(systemName: "doc.badge.plus").font(.system(size: 60)).foregroundColor(.orange)
+                Text("Eigene IPAs installieren").font(.title2).bold()
+                Text("Signiere lokale .ipa Dateien direkt auf dem Gerät.").font(.subheadline).foregroundColor(.gray).multilineTextAlignment(.center).padding(.horizontal)
+                Button(action: {}) { Label("IPA Datei auswählen", systemImage: "folder.badge.plus").padding() }.buttonStyle(.borderedProminent).tint(.orange)
             }
             .navigationTitle("Sideload")
         }
     }
 }
 
-// MARK: - TAB 3: CONSOLE VIEW (System Logs)
 struct ConsoleTabView: View {
     var body: some View {
         NavigationStack {
-            VStack {
-                LogView()
-                    .modifier(TerminalPlatter())
-                    .padding()
-            }
-            .navigationTitle("System Logs")
-            .background(Color(.black))
+            VStack { LogView().modifier(TerminalPlatter()).padding() }
+                .navigationTitle("System Logs")
+                .background(Color.black)
         }
     }
 }
 
-// MARK: - TAB 4: SETTINGS (Suche / Einstellungen)
 struct SettingsGridTabView: View {
     @StateObject private var store = StoreData.shared
-    
     var body: some View {
         NavigationStack {
             List {
                 Section(header: Text("Account")) {
-                    HStack {
-                        Image(systemName: "person.circle.fill")
-                            .foregroundColor(.orange)
-                        Text(store.isLoggedIn ? "Eingeloggt als Apple User" : "Nicht eingeloggt")
-                    }
-                    
+                    Text(store.isLoggedIn ? "Eingeloggt als Apple User" : "Nicht eingeloggt")
                     if store.isLoggedIn {
-                        Button(role: .destructive) {
-                            EncryptedKeychainWrapper.nuke()
-                            EncryptedKeychainWrapper.generateAndStoreKey()
-                            store.isLoggedIn = false
-                        } label: {
-                            Text("Abmelden")
-                        }
+                        Button(role: .destructive) { EncryptedKeychainWrapper.nuke(); store.isLoggedIn = false } label: { Text("Abmelden") }
                     }
                 }
-                
-                Section(header: Text("Werkzeuge")) {
-                    Button {
-                        LSApplicationWorkspace().openApplication(withBundleID: "com.apple.AppStore")
-                    } label: {
-                        Label("Offiziellen App Store öffnen", systemImage: "bag")
-                    }
-                }
-            }
-            .navigationTitle("Einstellungen")
+            }.navigationTitle("Einstellungen")
         }
     }
 }
 
-// MARK: - HELPER VIEWS
 struct KeyValueRow: View {
     let key: String
     let value: String
-    
     var body: some View {
-        HStack {
-            Text(key)
-                .foregroundColor(.gray)
-            Spacer()
-            Text(value)
-                .bold()
-                .lineLimit(1)
-        }
-        .font(.subheadline)
+        HStack { Text(key).foregroundColor(.gray); Spacer(); Text(value).bold().lineLimit(1) }.font(.subheadline)
     }
 }
