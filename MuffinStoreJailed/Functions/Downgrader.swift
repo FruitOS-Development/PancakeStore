@@ -15,94 +15,71 @@ import PartyUI
 
 struct SafariWebView: UIViewControllerRepresentable {
     let url: URL
-    
-    func makeUIViewController(context: Context) -> SFSafariViewController {
-        return SFSafariViewController(url: url)
-    }
-    
-    func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {
-    }
+    func makeUIViewController(context: Context) -> SFSafariViewController { SFSafariViewController(url: url) }
+    func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
 }
 
 func downgradeAppToVersion(appId: String, versionId: String, ipaTool: IPATool) {
-    let data = StoreData.shared
+    @ObservedObject var data = StoreData.shared
     
-    // Den gesamten schweren Download- und Zip-Prozess in den Hintergrund verlagern
+    DownloadManager.shared.startTracking(phase: .downloading)
+    
+    let path = ipaTool.downloadIPAForVersion(appId: appId, appVerId: versionId)
+    print("IPA downloaded to \(path)")
+    
+    DownloadManager.shared.updatePhase(.unpacking)
+    
+    let tempDir = FileManager.default.temporaryDirectory
+    let contents = try! FileManager.default.contentsOfDirectory(atPath: path)
+    let destinationUrl = tempDir.appendingPathComponent("app.ipa")
+    try! Zip.zipFiles(paths: contents.map { URL(fileURLWithPath: path).appendingPathComponent($0) }, zipFilePath: destinationUrl, password: nil, progress: { progress in
+        DownloadManager.shared.updateProgress(progress, totalBytes: 1.0)
+    })
+    
+    var path2 = URL(fileURLWithPath: path)
+    var appDir = path2.appendingPathComponent("Payload")
+    for file in try! FileManager.default.contentsOfDirectory(atPath: appDir.path) {
+        if file.hasSuffix(".app") {
+            appDir = appDir.appendingPathComponent(file)
+            break
+        }
+    }
+    let infoPlistPath = appDir.appendingPathComponent("Info.plist")
+    let infoPlist = NSDictionary(contentsOf: infoPlistPath)!
+    let appBundleId = infoPlist["CFBundleIdentifier"] as! String
+    let appVersion = infoPlist["CFBundleShortVersionString"] as! String
+
+    data.appBID = appBundleId
+    data.appVersion = appVersion
+    
+    DownloadManager.shared.updatePhase(.signing)
+    
+    let finalURL = "https://api.palera.in/genPlist?bundleid=\(appBundleId)&name=\(appBundleId)&version=\(appVersion)&fetchurl=http://127.0.0.1:9090/signed.ipa"
+    let installURL = "itms-services://?action=download-manifest&url=" + finalURL.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
+    
+    DownloadManager.shared.updatePhase(.serving)
+    
     DispatchQueue.global(qos: .background).async {
-        let path = ipaTool.downloadIPAForVersion(appId: appId, appVerId: versionId)
-        if path.isEmpty {
-            print("Download failed, aborting...")
-            return
-        }
-        print("IPA downloaded to \(path)")
-        
-        let tempDir = FileManager.default.temporaryDirectory
-        var contents = try! FileManager.default.contentsOfDirectory(atPath: path)
-        print("Contents: \(contents)")
-        
-        let destinationUrl = tempDir.appendingPathComponent("app.ipa")
-        try! Zip.zipFiles(paths: contents.map { URL(fileURLWithPath: path).appendingPathComponent($0) }, zipFilePath: destinationUrl, password: nil, progress: nil)
-        print("IPA zipped to \(destinationUrl)")
-        
-        let path2 = URL(fileURLWithPath: path)
-        var appDir = path2.appendingPathComponent("Payload")
-        for file in try! FileManager.default.contentsOfDirectory(atPath: appDir.path) {
-            if file.hasSuffix(".app") {
-                print("Found app: \(file)")
-                appDir = appDir.appendingPathComponent(file)
-                break
-            }
-        }
-        let infoPlistPath = appDir.appendingPathComponent("Info.plist")
-        let infoPlist = NSDictionary(contentsOf: infoPlistPath)!
-        let appBundleId = infoPlist["CFBundleIdentifier"] as! String
-        let appVersion = infoPlist["CFBundleShortVersionString"] as! String
-        print("appBundleId: \(appBundleId)")
-        print("appVersion: \(appVersion)")
-
-        // UI-Datenänderungen zurück auf den Main Thread
-        DispatchQueue.main.async {
-            data.appBID = appBundleId
-            data.appVersion = appVersion
-        }
-        
-        let finalURL = "https://api.palera.in/genPlist?bundleid=\(appBundleId)&name=\(appBundleId)&version=\(appVersion)&fetchurl=http://127.0.0.1:9090/signed.ipa"
-        let installURL = "itms-services://?action=download-manifest&url=" + finalURL.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
-        
         let server = Server()
-
         server.route(.GET, "signed.ipa", { _ in
-            print("Serving signed.ipa")
             let signedIPAData = try Data(contentsOf: destinationUrl)
             return HTTPResponse(body: signedIPAData)
         })
-
         server.route(.GET, "install", { _ in
-            print("Serving install page")
-            DispatchQueue.main.async {
-                data.hasServedApp = true
-            }
-            let installPage = """
-            <script type="text/javascript">
-                window.location = "\(installURL)"
-            </script>
-            """
+            data.hasServedApp = true
+            let installPage = "<script type=\"text/javascript\">window.location = \"\(installURL)\"</script>"
             return HTTPResponse(.ok, headers: ["Content-Type": "text/html"], content: installPage)
         })
         
         try! server.start(port: 9090)
-        print("Server has started listening")
         
         DispatchQueue.main.async {
-            print("Requesting app install")
+            DownloadManager.shared.updatePhase(.completed)
             let safariView = SafariWebView(url: URL(string: "http://127.0.0.1:9090/install")!)
             UIApplication.shared.windows.first?.rootViewController?.present(UIHostingController(rootView: safariView), animated: true, completion: nil)
         }
         
-        while server.isRunning {
-            sleep(1)
-        }
-        print("Server has stopped")
+        while server.isRunning { sleep(1) }
     }
 }
 
@@ -115,6 +92,12 @@ func promptForVersionId(appId: String, versionIds: [String], ipaTool: IPATool) {
         }))
     }
     alert.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: nil))
+    
+    if let popover = alert.popoverPresentationController, let root = UIApplication.shared.windows.first?.rootViewController {
+        popover.sourceView = root.view
+        popover.sourceRect = CGRect(x: root.view.bounds.midX, y: root.view.bounds.midY, width: 0, height: 0)
+        popover.permittedArrowDirections = []
+    }
     UIApplication.shared.windows.first?.rootViewController?.present(alert, animated: true, completion: nil)
 }
 
@@ -125,22 +108,18 @@ func showAlert(title: String, message: String) {
 }
 
 func getAllAppVersionIdsFromServer(appId: String, ipaTool: IPATool) {
-    let serverURL = "https://apis.bilin.eu.org/history/"
-    let url = URL(string: "\(serverURL)\(appId)")!
-    let request = URLRequest(url: url)
-    let task = URLSession.shared.dataTask(with: request) { data, response, error in
+    let serverURL = "https://apis.bilin.eu.org/history/\(appId)"
+    guard let url = URL(string: serverURL) else { return }
+    
+    URLSession.shared.dataTask(with: URLRequest(url: url)) { data, _, error in
         if let error = error {
-            DispatchQueue.main.async {
-                showAlert(title: "Error", message: error.localizedDescription)
-            }
+            DispatchQueue.main.async { showAlert(title: "Error", message: error.localizedDescription) }
             return
         }
         let json = try! JSONSerialization.jsonObject(with: data!) as! [String: Any]
         let versionIds = json["data"] as! [Dictionary<String, Any>]
         if versionIds.count == 0 {
-            DispatchQueue.main.async {
-                showAlert(title: "Error", message: "No version IDs, internal error maybe?")
-            }
+            DispatchQueue.main.async { showAlert(title: "Error", message: "No version IDs found.") }
             return
         }
         DispatchQueue.main.async {
@@ -152,10 +131,14 @@ func getAllAppVersionIdsFromServer(appId: String, ipaTool: IPATool) {
                 }))
             }
             alert.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: nil))
+            if let popover = alert.popoverPresentationController, let root = UIApplication.shared.windows.first?.rootViewController {
+                popover.sourceView = root.view
+                popover.sourceRect = CGRect(x: root.view.bounds.midX, y: root.view.bounds.midY, width: 0, height: 0)
+                popover.permittedArrowDirections = []
+            }
             UIApplication.shared.windows.first?.rootViewController?.present(alert, animated: true, completion: nil)
         }
-    }
-    task.resume()
+    }.resume()
 }
 
 func downgradeApp(appId: String, ipaTool: IPATool) -> Bool {
@@ -163,15 +146,14 @@ func downgradeApp(appId: String, ipaTool: IPATool) -> Bool {
     if versionIds.isEmpty {
         print("No version ids were found, aborting...")
         DispatchQueue.main.async {
-            Alertinator.shared.alert(title: "Failed to downgrade app!", body: "Failed to get available version ids. This may be because the app has not been purchased yet, or there are no versions available to downgrade to.")
+            Alertinator.shared.alert(title: "Failed to downgrade app!", body: "Failed to get available version ids.")
         }
         return false
     }
     
     DispatchQueue.main.async {
         let isiPad = UIDevice.current.userInterfaceIdiom == .pad
-        
-        let alert = UIAlertController(title: "Version ID", message: "Do you want to enter the version ID manually or request the list of version IDs from the server?", preferredStyle: isiPad ? .alert : .actionSheet)
+        let alert = UIAlertController(title: "Version ID", message: "Manual or Server identifier collection?", preferredStyle: isiPad ? .alert : .actionSheet)
         alert.addAction(UIAlertAction(title: "Manual", style: .default, handler: { _ in
             promptForVersionId(appId: appId, versionIds: versionIds, ipaTool: ipaTool)
         }))
@@ -180,12 +162,10 @@ func downgradeApp(appId: String, ipaTool: IPATool) -> Bool {
         }))
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: nil))
         
-        if let popoverController = alert.popoverPresentationController {
-            if let rootVC = UIApplication.shared.windows.first?.rootViewController {
-                popoverController.sourceView = rootVC.view
-                popoverController.sourceRect = CGRect(x: rootVC.view.bounds.midX, y: rootVC.view.bounds.midY, width: 0, height: 0)
-                popoverController.permittedArrowDirections = []
-            }
+        if let popoverController = alert.popoverPresentationController, let rootVC = UIApplication.shared.windows.first?.rootViewController {
+            popoverController.sourceView = rootVC.view
+            popoverController.sourceRect = CGRect(x: rootVC.view.bounds.midX, y: rootVC.view.bounds.midY, width: 0, height: 0)
+            popoverController.permittedArrowDirections = []
         }
         
         UIApplication.shared.windows.first?.rootViewController?.present(alert, animated: true, completion: nil)
@@ -196,14 +176,8 @@ func downgradeApp(appId: String, ipaTool: IPATool) -> Bool {
 func cleanUp() {
     do {
         let tempDir = FileManager.default.temporaryDirectory
-        let tempIPA = tempDir.appendingPathComponent("app.ipa")
-        
-        try FileManager.default.removeItem(at: tempIPA)
+        try FileManager.default.removeItem(at: tempDir.appendingPathComponent("app.ipa"))
         let docsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        let appFolder = docsURL.appendingPathComponent("app")
-        
-        try FileManager.default.removeItem(at: appFolder)
-    } catch {
-        
-    }
+        try FileManager.default.removeItem(at: docsURL.appendingPathComponent("app"))
+    } catch {}
 }
