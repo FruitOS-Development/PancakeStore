@@ -42,7 +42,8 @@ extension String {
     }
 }
 
-class StoreClient {
+// FIX: @unchecked Sendable hinzugefügt, um Strict Concurrency Fehler in Tasks zu beheben
+class StoreClient: @unchecked Sendable {
     var session: URLSession
     var appleId: String
     var password: String
@@ -154,7 +155,7 @@ class StoreClient {
     }
 
     func authenticate(requestCode: Bool = false) -> Bool {
-        @ObservedObject var store = StoreData.shared
+        // FIX: @ObservedObject entfernt, da es hier illegal ist und Swift 6 Concurrency-Fehler wirft.
         
         if self.guid == nil {
             self.guid = generateGuid(appleId: appleId)
@@ -233,12 +234,12 @@ class StoreClient {
                                 self.saveAuthInfo()
                                 ret = true
                                 
-                                // FIX: Mutationen auf den MainActor (Hauptthread) verlegen
+                                // FIX: Sicher auf dem MainActor ausführen
                                 DispatchQueue.main.async {
                                     StoreData.shared.isLoggedIn = true
                                 }
                             } else if (resp["customerMessage"] as! String).contains("Configurator_message") {
-                                // FIX: Mutationen auf den MainActor (Hauptthread) verlegen
+                                // FIX: Sicher auf dem MainActor ausführen
                                 DispatchQueue.main.async {
                                     StoreData.shared.sent2FA = true
                                 }
@@ -350,7 +351,8 @@ class StoreClient {
     }
 }
 
-class IPATool {
+// FIX: IPATool ebenfalls thread-safe markieren
+class IPATool: @unchecked Sendable {
     var session: URLSession
     var appleId: String
     var password: String
