@@ -116,14 +116,6 @@ class StoreClient {
         return false
     }
     
-    // pancakestore is saved! thanks ipatool!
-    // admittedly i kinda owe this hoorah to that vibecoded ass pull-request, i had to stoop to its level too :(
-    // oh well. - skadz, 2.24.26
-    
-    // if i had a nickel for every time this app has been broken by random apple backend changes
-    // and i've had to copy some AI-slopped pull request fix from ipatool to fix it
-    // i'd have two nickels.
-    // see you all on round three. - Skadz, 6.11.26
     func getBagEndpoint() async -> String {
         let fallback = "https://auth.itunes.apple.com/auth/v1/native/"
         
@@ -141,7 +133,6 @@ class StoreClient {
             let (data, _) = try await URLSession.shared.data(for: request)
             guard !data.isEmpty else { print("no data for bag.xml, returning fallback value..."); return fallback }
 
-            // i'm sorry i'm sorry please don't hit me i know i know
             if let xmlString = String(data: data, encoding: .utf8),
                let plistStart = xmlString.range(of: "<plist"),
                let plistEnd = xmlString.range(of: "</plist>") {
@@ -221,7 +212,6 @@ class StoreClient {
                     
                     if let data = data {
                         do {
-//                            print("Data: \(String(data: data, encoding: .utf8))")
                             let resp = try PropertyListSerialization.propertyList(from: data, options: [], format: nil) as! [String: Any]
                             if let dsPersonId = resp["dsPersonId"] as? String, let passwordToken = resp["passwordToken"] as? String, !dsPersonId.isEmpty, !passwordToken.isEmpty {
                                 print("Authentication successful!")
@@ -242,9 +232,16 @@ class StoreClient {
                                 self.accountName = address["firstName"]! + " " + address["lastName"]!
                                 self.saveAuthInfo()
                                 ret = true
-                                store.isLoggedIn = true
+                                
+                                // FIX: Mutationen auf den MainActor (Hauptthread) verlegen
+                                DispatchQueue.main.async {
+                                    StoreData.shared.isLoggedIn = true
+                                }
                             } else if (resp["customerMessage"] as! String).contains("Configurator_message") {
-                                store.sent2FA = true
+                                // FIX: Mutationen auf den MainActor (Hauptthread) verlegen
+                                DispatchQueue.main.async {
+                                    StoreData.shared.sent2FA = true
+                                }
                                 print("need 2fa...")
                                 ret = false
                             } else {
@@ -536,8 +533,6 @@ class EncryptedKeychainWrapper {
     }
 
     static func loadAuthInfo() -> String? {
-        //@ObservedObject var store = StoreData.shared
-        
         let fm = FileManager.default
         let path = fm.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("authinfo").path
         if !fm.fileExists(atPath: path) {
@@ -553,8 +548,6 @@ class EncryptedKeychainWrapper {
         let status = SecItemCopyMatching(query as CFDictionary, &keyRef)
         if status != errSecSuccess {
             print("Failed to get key! Aborting login...")
-            //store.sent2FA = false
-            // this is where login can abort
             return nil
         }
         print("Got key!")
