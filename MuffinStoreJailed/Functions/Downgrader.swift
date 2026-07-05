@@ -159,17 +159,30 @@ func downgradeApp(appId: String, ipaTool: IPATool) -> Bool {
         return false
     }
     
-    let isiPad = UIDevice.current.userInterfaceIdiom == .pad
-    
-    let alert = UIAlertController(title: "Version ID", message: "Do you want to enter the version ID manually or request the list of version IDs from the server?", preferredStyle: isiPad ? .alert : .actionSheet)
-    alert.addAction(UIAlertAction(title: "Manual", style: .default, handler: { _ in
-        promptForVersionId(appId: appId, versionIds: versionIds, ipaTool: ipaTool)
-    }))
-    alert.addAction(UIAlertAction(title: "Server", style: .default, handler: { _ in
-        getAllAppVersionIdsFromServer(appId: appId, ipaTool: ipaTool)
-    }))
-    alert.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: nil))
-    UIApplication.shared.windows.first?.rootViewController?.present(alert, animated: true, completion: nil)
+    // UI-Erstellung und -Präsentation auf dem Main Thread erzwingen
+    DispatchQueue.main.async {
+        let isiPad = UIDevice.current.userInterfaceIdiom == .pad
+        
+        let alert = UIAlertController(title: "Version ID", message: "Do you want to enter the version ID manually or request the list of version IDs from the server?", preferredStyle: isiPad ? .alert : .actionSheet)
+        alert.addAction(UIAlertAction(title: "Manual", style: .default, handler: { _ in
+            promptForVersionId(appId: appId, versionIds: versionIds, ipaTool: ipaTool)
+        }))
+        alert.addAction(UIAlertAction(title: "Server", style: .default, handler: { _ in
+            getAllAppVersionIdsFromServer(appId: appId, ipaTool: ipaTool)
+        }))
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: nil))
+        
+        // Verhindert Abstürze auf iPads bei .actionSheet-Präsentationen
+        if let popoverController = alert.popoverPresentationController {
+            if let rootVC = UIApplication.shared.windows.first?.rootViewController {
+                popoverController.sourceView = rootVC.view
+                popoverController.sourceRect = CGRect(x: rootVC.view.bounds.midX, y: rootVC.view.bounds.midY, width: 0, height: 0)
+                popoverController.permittedArrowDirections = []
+            }
+        }
+        
+        UIApplication.shared.windows.first?.rootViewController?.present(alert, animated: true, completion: nil)
+    }
     return true
 }
 
