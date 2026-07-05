@@ -25,42 +25,50 @@ struct SafariWebView: UIViewControllerRepresentable {
 }
 
 func downgradeAppToVersion(appId: String, versionId: String, ipaTool: IPATool) {
-    @ObservedObject var data = StoreData.shared
+    let data = StoreData.shared
     
-    let path = ipaTool.downloadIPAForVersion(appId: appId, appVerId: versionId)
-    print("IPA downloaded to \(path)")
-    
-    let tempDir = FileManager.default.temporaryDirectory
-    var contents = try! FileManager.default.contentsOfDirectory(atPath: path)
-    print("Contents: \(contents)")
-    // also delete this; i wanna see both the app's directory and the temp ipa GONE.
-    let destinationUrl = tempDir.appendingPathComponent("app.ipa")
-    try! Zip.zipFiles(paths: contents.map { URL(fileURLWithPath: path).appendingPathComponent($0) }, zipFilePath: destinationUrl, password: nil, progress: nil)
-    print("IPA zipped to \(destinationUrl)")
-    let path2 = URL(fileURLWithPath: path)
-    var appDir = path2.appendingPathComponent("Payload")
-    for file in try! FileManager.default.contentsOfDirectory(atPath: appDir.path) {
-        if file.hasSuffix(".app") {
-            print("Found app: \(file)")
-            // i assume we delete this? idk how to though
-            appDir = appDir.appendingPathComponent(file)
-            break
-        }
-    }
-    let infoPlistPath = appDir.appendingPathComponent("Info.plist")
-    let infoPlist = NSDictionary(contentsOf: infoPlistPath)!
-    let appBundleId = infoPlist["CFBundleIdentifier"] as! String
-    let appVersion = infoPlist["CFBundleShortVersionString"] as! String
-    print("appBundleId: \(appBundleId)")
-    print("appVersion: \(appVersion)")
-
-    data.appBID = appBundleId
-    data.appVersion = appVersion
-    
-    let finalURL = "https://api.palera.in/genPlist?bundleid=\(appBundleId)&name=\(appBundleId)&version=\(appVersion)&fetchurl=http://127.0.0.1:9090/signed.ipa"
-    let installURL = "itms-services://?action=download-manifest&url=" + finalURL.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
-    
+    // Den gesamten schweren Download- und Zip-Prozess in den Hintergrund verlagern
     DispatchQueue.global(qos: .background).async {
+        let path = ipaTool.downloadIPAForVersion(appId: appId, appVerId: versionId)
+        if path.isEmpty {
+            print("Download failed, aborting...")
+            return
+        }
+        print("IPA downloaded to \(path)")
+        
+        let tempDir = FileManager.default.temporaryDirectory
+        var contents = try! FileManager.default.contentsOfDirectory(atPath: path)
+        print("Contents: \(contents)")
+        
+        let destinationUrl = tempDir.appendingPathComponent("app.ipa")
+        try! Zip.zipFiles(paths: contents.map { URL(fileURLWithPath: path).appendingPathComponent($0) }, zipFilePath: destinationUrl, password: nil, progress: nil)
+        print("IPA zipped to \(destinationUrl)")
+        
+        let path2 = URL(fileURLWithPath: path)
+        var appDir = path2.appendingPathComponent("Payload")
+        for file in try! FileManager.default.contentsOfDirectory(atPath: appDir.path) {
+            if file.hasSuffix(".app") {
+                print("Found app: \(file)")
+                appDir = appDir.appendingPathComponent(file)
+                break
+            }
+        }
+        let infoPlistPath = appDir.appendingPathComponent("Info.plist")
+        let infoPlist = NSDictionary(contentsOf: infoPlistPath)!
+        let appBundleId = infoPlist["CFBundleIdentifier"] as! String
+        let appVersion = infoPlist["CFBundleShortVersionString"] as! String
+        print("appBundleId: \(appBundleId)")
+        print("appVersion: \(appVersion)")
+
+        // UI-Datenänderungen zurück auf den Main Thread
+        DispatchQueue.main.async {
+            data.appBID = appBundleId
+            data.appVersion = appVersion
+        }
+        
+        let finalURL = "https://api.palera.in/genPlist?bundleid=\(appBundleId)&name=\(appBundleId)&version=\(appVersion)&fetchurl=http://127.0.0.1:9090/signed.ipa"
+        let installURL = "itms-services://?action=download-manifest&url=" + finalURL.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
+        
         let server = Server()
 
         server.route(.GET, "signed.ipa", { _ in
@@ -71,7 +79,9 @@ func downgradeAppToVersion(appId: String, versionId: String, ipaTool: IPATool) {
 
         server.route(.GET, "install", { _ in
             print("Serving install page")
-            data.hasServedApp = true
+            DispatchQueue.main.async {
+                data.hasServedApp = true
+            }
             let installPage = """
             <script type="text/javascript">
                 window.location = "\(installURL)"
@@ -85,7 +95,6 @@ func downgradeAppToVersion(appId: String, versionId: String, ipaTool: IPATool) {
         
         DispatchQueue.main.async {
             print("Requesting app install")
-            
             let safariView = SafariWebView(url: URL(string: "http://127.0.0.1:9090/install")!)
             UIApplication.shared.windows.first?.rootViewController?.present(UIHostingController(rootView: safariView), animated: true, completion: nil)
         }
@@ -159,7 +168,6 @@ func downgradeApp(appId: String, ipaTool: IPATool) -> Bool {
         return false
     }
     
-    // UI-Erstellung und -Präsentation auf dem Main Thread erzwingen
     DispatchQueue.main.async {
         let isiPad = UIDevice.current.userInterfaceIdiom == .pad
         
@@ -172,7 +180,6 @@ func downgradeApp(appId: String, ipaTool: IPATool) -> Bool {
         }))
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: nil))
         
-        // Verhindert Abstürze auf iPads bei .actionSheet-Präsentationen
         if let popoverController = alert.popoverPresentationController {
             if let rootVC = UIApplication.shared.windows.first?.rootViewController {
                 popoverController.sourceView = rootVC.view
@@ -188,12 +195,10 @@ func downgradeApp(appId: String, ipaTool: IPATool) -> Bool {
 
 func cleanUp() {
     do {
-        // first, delete the temporary ipa file.
         let tempDir = FileManager.default.temporaryDirectory
         let tempIPA = tempDir.appendingPathComponent("app.ipa")
         
         try FileManager.default.removeItem(at: tempIPA)
-        // then, nuke the app directory.
         let docsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         let appFolder = docsURL.appendingPathComponent("app")
         
