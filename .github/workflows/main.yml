@@ -10,6 +10,12 @@ jobs:
     runs-on: macos-15
     steps:
      - uses: actions/checkout@v3
+
+     # Zwingt den Runner, das neueste Xcode mit Swift 6.2+ Support zu nutzen
+     - name: Set up Xcode version
+       uses: maxim-lobanov/setup-xcode@v1
+       with:
+         xcode-version: 'latest-stable'
      
      - name: Compile
        run: |
